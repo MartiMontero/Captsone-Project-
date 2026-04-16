@@ -1,9 +1,0 @@
-env/
-.env
-rate_limit.db
-*.pyc
-transactions.db
-__pycache__
-.env.huggingface.template
-.env.ollama.template
-.env.openai.template
