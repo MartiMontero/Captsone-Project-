@@ -1,0 +1,53 @@
+ARG UBUNTU_VERSION=22.04
+ARG CUDA_VERSION=12.2.2
+ARG BASE_CUDA_DEV_CONTAINER=nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
+
+FROM ${BASE_CUDA_DEV_CONTAINER} AS build
+
+ARG CUDA_ARCH=default
+
+# Set working directory
+WORKDIR /app
+
+# Environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_ARCH=${CUDA_ARCH}
+
+# Copy stuff
+COPY pyproject.toml .
+COPY README.md .
+COPY llmgoat ./llmgoat
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.10 python3-pip python3.10-venv \
+    git build-essential ninja-build cmake \
+    curl wget ccache \
+    && rm -rf /var/lib/apt/lists/* && \
+    # Upgrade pip
+    pip install --no-cache-dir --upgrade pip && \
+    # Compile llama-cpp-python with CUDA support
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:$LD_LIBRARY_PATH && \
+    ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
+    if [ "${CUDA_ARCH}" != "default" ]; then \
+        export CMAKE_ARGS="-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH} -DGGML_OPENMP=ON"; \
+    else \
+        export CMAKE_ARGS="-DGGML_CUDA=on -DGGML_OPENMP=ON"; \
+    fi && \
+    FORCE_CMAKE=1 \
+    NINJA_NUM_JOBS=$(nproc) \
+    pip install --no-cache-dir llama-cpp-python==0.3.16 && \
+    rm /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
+    # Reinstall pure CPU-only torch to avoid CUDA linkage errors
+    pip uninstall -y torch torchvision torchaudio && \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+    torch==2.8.0 torchvision torchaudio && \
+    # Install LLMGoat
+    pip install --no-cache-dir .
+
+# Expose the port for LLMGoat
+EXPOSE 5000
+
+# Run the app
+ENTRYPOINT ["llmgoat"]

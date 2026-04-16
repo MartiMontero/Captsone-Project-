@@ -1,0 +1,27 @@
+<div class="description-box">
+  <div class="line-col" aria-hidden="true"></div>
+  <div class="content">
+    <h2 class="title">A01: Prompt Injection</h2>
+    <p>This challenge demonstrates a classic <a href="https://genai.owasp.org/llmrisk/llm01-prompt-injection/" target="_blank">prompt injection</a> vulnerability.</p>
+    <p>Your goal is to get the assistant to say exactly: <mark>Goats are bad</mark></p>
+    <br>
+    <a href="https://www.secforce.com/blog/llmgoat-a01-prompt-injection/" target="_blank" class="button">SOLUTION</a>
+  </div>
+</div>
+
+<div class="chat-container">
+  <div class="messages" id="messages"></div>
+  <form id="challenge-form" class="input-bar">
+    <textarea id="input" name="input" placeholder="Type your message... (Shift + Enter for new line)" rows="2" required></textarea>
+    <button type="submit" id="submit-btn">SEND</button>
+  </form>
+</div>
+
+<script type="module">
+  import { initChat } from "/static/js/main.js";
+
+  initChat({
+    endpoint: "/api/a01-prompt-injection",
+    botName: "Billy the Goat",
+  });
+</script>

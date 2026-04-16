@@ -1,0 +1,261 @@
+"""
+This module contains multiple helper function used throughout the codebase.
+"""
+import os
+import stat
+import shutil
+import sqlite3
+import time
+import requests
+import hashlib
+from requests.adapters import HTTPAdapter, Retry
+from tqdm import tqdm
+from .definitions import LLMGOAT_FOLDER, DEFAULT_MODELS_FOLDER, DEFAULT_CACHE_FOLDER, DEFAULT_CHALLENGES_FOLDER, LLMGOAT_VERBOSE, LLMGOAT_DEBUG
+from .logger import goatlog
+
+def banner(version):
+    print(f"""
+      ░█░░░█░░░█▄█
+      ░█░░░█░░░█░█
+      ░▀▀▀░▀▀▀░▀░▀
+    ░█▀▀░█▀█░█▀█░▀█▀
+    ░█░█░█░█░█▀█░░█░
+    ░▀▀▀░▀▀▀░▀░▀░░▀░
+    LLMGoat v{version}
+
+""")
+
+
+def file_exists(filepath: str) -> bool:
+    """Check if a file exists at the given filepath and return a boolean."""
+    return os.path.exists(filepath)
+
+def create_read_only_file(filename: str, content: str) -> None:
+    """
+    Creates a read-only file with the specified content if it doesn't already exist.
+    """
+
+    if file_exists(filename):
+        return
+
+    # Create and write content to the file
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write(content)
+    
+    # Make the file read-only
+    os.chmod(filename, stat.S_IREAD)
+    goatlog.info(f"Created read-only file: {filename}")
+
+
+
+def create_folder_if_missing(path: str) -> None:
+    """Utility function to create a folder if missing"""
+    if not os.path.isdir(path):
+        os.makedirs(path)
+
+
+def delete_folder_if_exists(path: str) -> None:
+    """Utility function to delete a folder if exists"""
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+
+def create_sqlite_db(db_name, schema_and_data):
+    """
+    Creates an SQLite database from a given schema and data structure.
+    """
+
+    if file_exists(db_name):
+        return
+
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+
+    for table_name, table_info in schema_and_data.items():
+        # 1. Build CREATE TABLE statement
+        columns_def = ", ".join([f"{col} {dtype}" for col, dtype in table_info["columns"].items()])
+        create_stmt = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_def});"
+        cursor.execute(create_stmt)
+
+        # 2. Insert data if provided
+        data = table_info.get("data", [])
+        if data:
+            columns = list(data[0].keys())
+            placeholders = ", ".join(["?"] * len(columns))
+            insert_stmt = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+            for row in data:
+                cursor.execute(insert_stmt, tuple(row.values()))
+
+    conn.commit()
+    conn.close()
+    goatlog.info(f"Database '{db_name}' created successfully.")
+
+
+def ensure_folders():
+    # Create the .LLMGoat folder in $HOME if missing
+    create_folder_if_missing(LLMGOAT_FOLDER)
+
+    # Create the models, cache and challenges folders within the above one if missing
+    create_folder_if_missing(DEFAULT_MODELS_FOLDER)
+    create_folder_if_missing(DEFAULT_CACHE_FOLDER)
+    create_folder_if_missing(DEFAULT_CHALLENGES_FOLDER)
+
+
+def set_env_if_empty(env_var, env_value):
+    """Set an ENV variable if empty, otherwise don't change it (ENV vars take precedence!)"""
+    os.environ[env_var] = os.environ.get(env_var, env_value)
+
+
+def sha256_of_file(filepath):
+    """Calculate the SHA-256 hash of a file."""
+    sha256_hash = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        # Read file in chunks to handle large files efficiently
+        for chunk in iter(lambda: f.read(8192), b""):
+            sha256_hash.update(chunk)
+    return sha256_hash.hexdigest()
+
+
+def download_file(url, output_folder, filename=None, show_progress=True, max_retries=3):
+    """Download a file from a URL and save it to the specified output folder."""
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Determine filename
+    if filename is None:
+        filename = os.path.basename(url.split("?")[0]) or "downloaded_file"
+
+    output_path = os.path.join(output_folder, filename)
+
+    retry_strategy = Retry(
+        total=max_retries,
+        backoff_factor=2,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            with session.get(url, stream=True, timeout=(10, 120)) as r:
+                r.raise_for_status()
+                total_size = int(r.headers.get('content-length', 0))
+                chunk_size = 8192
+
+                progress = tqdm(
+                    total=total_size,
+                    unit='B',
+                    unit_scale=True,
+                    desc=filename,
+                    disable=not show_progress
+                )
+
+                with open(output_path, "wb") as f:
+                    downloaded = 0
+                    for chunk in r.iter_content(chunk_size=chunk_size):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            progress.update(len(chunk))
+
+                progress.close()
+
+                if total_size and downloaded != total_size:
+                    raise IOError(f"Downloaded size mismatch: {downloaded} != {total_size}")
+
+            return output_path
+
+        except Exception as e:
+            attempt += 1
+            goatlog.warning(f"Download attempt {attempt}/{max_retries} failed for {url}: {e}")
+            if os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except Exception:
+                    pass
+
+            if attempt >= max_retries:
+                goatlog.error(f"Failed to download file after {max_retries} attempts: {url}")
+                raise
+
+            time.sleep(2 ** attempt)
+
+    raise RuntimeError(f"Unable to download file after {max_retries} attempts: {url}")
+
+
+def is_running_in_container() -> bool:
+    """
+    Detect if the current process is running inside a container.
+    Works for Docker, Podman, Kubernetes, etc.
+    """
+    try:
+        # Common indicator: existence of /.dockerenv file
+        if os.path.exists("/.dockerenv"):
+            return True
+
+        # Check cgroup info for container-specific markers
+        with open("/proc/1/cgroup", "rt") as f:
+            content = f.read()
+            if any(keyword in content for keyword in ("docker", "kubepods", "containerd", "podman")):
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
+def is_verbose_mode():
+    """Check whether verbose mode is enabled (environment takes precedence)."""
+    verbose_env_value = os.environ.get(LLMGOAT_VERBOSE, "0")
+    return verbose_env_value == "1"
+
+def is_debug_mode():
+    """Check whether debug mode is enabled (environment takes precedence)."""
+    debug_env_value = os.environ.get(LLMGOAT_DEBUG, "0")
+    return debug_env_value == "1"
+
+
+def challenge_response(response, solved, prompt=None):
+    """
+    Construct a JSON-safe dictionary for all goat challenges.
+    Includes debug_prompt only if verbose mode is enabled.
+    """
+    data = {
+        "response": response,
+        "solved": solved,
+    }
+
+    if is_debug_mode() and prompt:
+        data["debug_prompt"] = prompt
+
+    return data
+
+
+def disclaimer():
+    """
+    Print a big visual disclaimer warning the user that this app is intentionally vulnerable.
+    """
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+
+    message = f"""
+{RED}{'=' * 90}
+{BOLD}{' ' * 28}WARNING: RUNNING ON HOST SYSTEM!{RESET}{RED}
+{'=' * 90}{RESET}
+
+{YELLOW}{BOLD}This application is intentionally vulnerable and should not be run on a host system!
+It is designed for testing and educational use only. 
+Run it inside a secure, disposable container.{RESET}
+
+{RED}You are solely responsible for any damage, data loss or security issues
+caused by running this software on your machine.{RESET}
+
+{RED}{'=' * 90}{RESET}
+"""
+
+    print(message)
+    input(f"{BOLD}Press Enter to acknowledge and continue...{RESET}\n")

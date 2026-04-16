@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LLMGoat - OWASP Top 10 for LLMs</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+</head>
+<body>
+  <div class="sidebar">
+    <div class="sidebar-header">
+        <a href="/" class="logo-link">
+            <img src="{{ url_for('static', filename='images/Logo.svg') }}" alt="LLMGoat" class="logo">
+        </a>
+    </div>
+    <nav class="sidebar-nav">
+        <h2>OWASP Top 10</h2>
+        <ul>
+            {% for item in challenges %}
+                <li id="challenge-{{ item.id }}"
+                    class="
+                        {% if item.id == current_challenge %} current {% endif %}
+                        {% if item.id in completed_challenges %} completed {% endif %}
+                ">
+                    <a href="/challenges/{{ item.id }}">
+                        <span class="icon"></span>
+                        <span class="title">{{ item.title }}</span>
+                    </a>
+                 </li>
+            {% endfor %}
+        </ul>
+
+        <form id="model-select-form" class="model-box">
+            <div class="model-inner-box">
+                <h3 class="model-title">Select Model</h3>
+                <select name="model_name" id="model-select">
+                    {% for model in models %}
+                        <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>
+                            {{ model }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </nav>
+  </div>
+    
+  <div class="main-content-wrapper">
+    <main class="main-content">
+        {% include content_template %}
+    </main>
+        
+    <footer class="main-footer">
+        LLMGOAT by <a href="https://www.secforce.com/" target="_blank">SECFORCE</a>
+    </footer>
+  </div>
+
+  <script type="module">
+    import { initModelStatus, initModelSelector } from "/static/js/main.js";
+
+    initModelStatus()
+    initModelSelector();
+  </script>
+
+</body>
+</html>

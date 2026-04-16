@@ -1,0 +1,45 @@
+<div class="description-box">
+  <div class="line-col" aria-hidden="true"></div>
+  <div class="content">
+    <h2 class="title">A09: Misinformation Challenge</h2>
+    <p>This challenge demonstrates a <a href="https://genai.owasp.org/llmrisk/llm092025-misinformation/" target="_blank">misinformation</a> vulnerability.</p>
+    <p>Your goal is to convince the assistant that this image depicts a <mark>Cyborg Goat</mark>.</p>
+    <p>To reset the challenge, just reload the page.</p>
+    <br>
+    <a href="https://www.secforce.com/blog/llmgoat-a09-misinformation/" target="_blank" class="button">SOLUTION</a>
+  </div>
+</div>
+
+<div class="button-box">
+  <input type="file" id="upload-file" style="display:none" accept="image/*" />
+  <button id="download-btn" class="button">DOWNLOAD IMAGE</button>
+  <button id="upload-btn" class="button">UPLOAD IMAGE</button>
+  <button id="process-btn" class="button">PROCESS IMAGE</button>
+</div>
+
+<div class="blue-box">
+  <img id="image-preview" class="image-preview" src="{{ url_for('static', filename='challenges/goat.png') }}" alt="Image preview"/>
+  <div id="output-box" class="output-box"></div>
+</div>
+
+<script type="module">
+  import { showSolvedBox, setProcessButtonState, uploadImage, processImage, downloadImage } from '/static/js/main.js';
+
+  const uploadBtn = document.getElementById("upload-btn");
+  const uploadFile = document.getElementById("upload-file");
+  const processBtn = document.getElementById("process-btn");
+  const imagePreview = document.getElementById("image-preview");
+  const downloadBtn = document.getElementById("download-btn");
+  const outputBox = document.getElementById("output-box");
+
+  downloadBtn.onclick = () => downloadImage("{{ url_for('static', filename='challenges/goat.png') }}");
+
+  uploadBtn.onclick = () => uploadFile.click();
+
+  uploadFile.onchange = () => uploadImage(uploadFile, imagePreview, processBtn, outputBox);
+
+  setProcessButtonState(processBtn, true);
+
+  processBtn.onclick = () => processImage(processBtn, outputBox);
+
+</script>

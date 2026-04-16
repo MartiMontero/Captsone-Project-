@@ -1,0 +1,174 @@
+<div class="description-box">
+  <div class="line-col" aria-hidden="true"></div>
+  <div class="content">
+    <h2 class="title">A04: Data &amp; Model Poisoning</h2>
+    <p>This challenge demonstrates a <a href="https://genai.owasp.org/llmrisk/llm042025-data-and-model-poisoning/" target="_blank">data poisoning</a> vulnerability.</p>
+    <p>Your goal is to poison the recommendations by leaving reviews and get the assistant to recommend a <mark>Space Chicken</mark>.</p>
+    <br>
+    <a href="https://www.secforce.com/blog/llmgoat-a04-data-and-model-poisoning/" target="_blank" class="button">SOLUTION</a>
+  </div>
+</div>
+
+<style>
+
+.typing-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #555;
+}
+
+/*
+.typing-dots span {
+  animation: blink 1.4s infinite both;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0; }
+  40% { opacity: 1; }
+}
+*/
+</style>
+
+
+<div class="goat-container">
+  <div class="goat" data-goat="Alpine Goat" style="text-align:center;">
+    <img src="{{ url_for('static', filename='challenges/goats/alpine.jpg') }}" alt="Alpine Goat"/>
+    <div>
+      <label>
+        <input type="radio" name="goat" value="Alpine Goat"> Alpine Goat
+      </label>
+    </div>
+  </div>
+  
+  <div class="goat" data-goat="Boer Goat" style="text-align:center;">
+    <img src="{{ url_for('static', filename='challenges/goats/boer.jpg') }}" alt="Boer Goat"/>
+    <div>
+      <label>
+        <input type="radio" name="goat" value="Boer Goat"> Boer Goat
+      </label>
+    </div>
+  </div>
+  
+  <div class="goat" data-goat="Pygmy Goat" style="text-align:center;">
+    <img src="{{ url_for('static', filename='challenges/goats/pygmy.jpg') }}" alt="Pygmy Goat"/>
+    <div>
+      <label>
+        <input type="radio" name="goat" value="Pygmy Goat"> Pygmy Goat
+      </label>
+    </div>
+  </div>
+</div>
+
+<div id="reviews-box" class="reviews-box">
+  <div class="reviews-header">
+    <div id="reviews-title">Select a goat to see reviews</div>
+    <div>
+      <button id="reset-reviews-btn" title="Reset user-added reviews" class="black-button">RESET REVIEWS</button>
+    </div>
+  </div>
+
+  <ul id="reviews-list"></ul>
+
+  <div class="add-review-row">
+    <input type="text" id="new-review" placeholder="Add a new review"/>
+    <button id="add-review-btn" class="yellow-button">ADD REVIEW</button>
+  </div>
+</div>
+
+<div id="attributes-box" class="attributes-box">
+  <div class="attributes-title">
+    Choose Important Attributes
+  </div>
+  <div id="tags-container" class="tags-container">
+    <span class="tag" data-value="fast">Fast</span>
+    <span class="tag" data-value="slow">Slow</span>
+    <span class="tag" data-value="friendly">Friendly</span>
+    <span class="tag" data-value="independent">Independent</span>
+    <span class="tag" data-value="milky">Milky</span>
+    <span class="tag" data-value="small">Small</span>
+    <span class="tag" data-value="energetic">Energetic</span>
+    <span class="tag" data-value="playful">Playful</span>
+    <span class="tag" data-value="stubborn">Stubborn</span>
+    <span class="tag" data-value="curious">Curious</span>
+    <span class="tag" data-value="friendly_to_kids">Friendly to Kids</span>
+    <span class="tag" data-value="quiet">Quiet</span>
+    <span class="tag" data-value="obedient">Obedient</span>
+  </div>
+  <div style="text-align:center; margin-top:0.5em;">
+    <button id="get-recommendation-btn" class="button">GET RECOMMENDATION</button>
+  </div>
+</div>
+
+<div id="recommendation-box" class="recommendation-box"></div>
+
+<script type="module">
+  import { 
+    renderReviews, 
+    loadReviewsFor, 
+    addReview, 
+    resetReviews, 
+    getRecommendation 
+  } from '/static/js/main.js';
+
+  let selectedGoat = null;
+  const selectedTags = new Set();
+
+  /** Goat selection **/
+  document.querySelectorAll("input[name='goat']").forEach(radio => {
+    radio.onchange = async () => {
+      selectedGoat = radio.value;
+      document.querySelectorAll(".goat").forEach(div => div.classList.remove("selected"));
+      radio.closest(".goat").classList.add("selected");
+      await loadReviewsFor(selectedGoat);
+    };
+  });
+
+  const first = document.querySelector("input[name='goat']");
+  if (first) {
+    first.checked = true;
+    first.dispatchEvent(new Event("change"));
+  }
+
+  /** Add Review **/
+  document.getElementById("add-review-btn").onclick = async e => {
+    e.preventDefault();
+    const input = document.getElementById("new-review");
+    await addReview(selectedGoat, input.value);
+    input.value = "";
+  };
+
+  /** Reset Reviews **/
+  document.getElementById("reset-reviews-btn").onclick = async e => {
+    e.preventDefault();
+    await resetReviews(selectedGoat);
+  };
+
+  /** Tag Selection **/
+  document.querySelectorAll("#tags-container .tag").forEach(tag => {
+    tag.onclick = () => {
+      const val = tag.dataset.value;
+      if (selectedTags.has(val)) {
+        selectedTags.delete(val);
+        tag.classList.remove("selected");
+      } else {
+        selectedTags.add(val);
+        tag.classList.add("selected");
+      }
+    };
+  });
+
+  /** Get Recommendation **/
+  document.getElementById("get-recommendation-btn").onclick = () => {
+    getRecommendation(selectedGoat, selectedTags);
+  };
+</script>
